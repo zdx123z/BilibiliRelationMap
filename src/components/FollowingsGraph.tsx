@@ -1,11 +1,22 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Spin, Button, Space, Slider, InputNumber, Card, Switch, Tooltip } from "antd";
+import {
+  Spin,
+  Button,
+  Space,
+  Slider,
+  InputNumber,
+  Card,
+  Switch,
+  Tooltip,
+} from "antd";
 import {
   ReloadOutlined,
   ZoomInOutlined,
   SettingOutlined,
   CloseOutlined,
   QuestionCircleOutlined,
+  DownloadOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import { Cosmograph } from "@cosmograph/cosmograph";
 import { FansItem } from "../types/bilibili";
@@ -47,10 +58,19 @@ interface DebugParams {
   swapLinkDirection: boolean;
 }
 
+// 节点颜色常量
+const NODE_COLOR_VIP = "#ff4080b2"; // 大会员节点颜色（亮粉色）
+const NODE_COLOR_NORMAL = "#00e1ffb0"; // 普通用户节点颜色（亮青色）
+
+// 连线颜色常量
+const LINK_COLOR_BIDIRECTIONAL = "#FFD700"; // 双向关注连线颜色（金色）
+const LINK_COLOR_NORMAL = "#00D9FF"; // 单向关注连线颜色（亮青色）
+
 const FollowingsGraph: React.FC = () => {
   const { message } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Cosmograph<GraphNode, GraphLink> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [followingsList, setFollowingsList] = useState<FansItem[]>([]);
   const [commonFollowingsMap, setCommonFollowingsMap] = useState<
@@ -60,17 +80,17 @@ const FollowingsGraph: React.FC = () => {
   const [stats, setStats] = useState({ total: 0, connected: 0, links: 0 });
   const [debugMode, setDebugMode] = useState(false);
   const [debugParams, setDebugParams] = useState<DebugParams>({
-    nodeSizeMultiplier: 0.3,
-    nodeSizeScale: 0.8,
+    nodeSizeMultiplier: 0.1,
+    nodeSizeScale: 0.5,
     nodeMaxSize: 2,
-    linkWidth: 2.5,
+    linkWidth: 1.3,
     // 模拟参数 - 使用官方文档建议的默认值
-    gravity: 0.0,
-    repulsion: 0.1,
+    gravity: 0.67,
+    repulsion: 2,
     repulsionTheta: 1.7,
-    linkSpring: 1.0,
+    linkSpring: 0.37,
     linkDistance: 2,
-    friction: 0.85,
+    friction: 1,
     // UI 参数
     showDynamicLabels: true,
     curvedLinks: false,
@@ -88,16 +108,16 @@ const FollowingsGraph: React.FC = () => {
       // 节点配置 - 动态大小将在 setData 时设置
       nodeColor: (node: GraphNode) => {
         // 亮青色（普通用户）和亮粉色（大会员）
-        return node.color === "#FB7299" ? "#FF4081" : "#00BCD4";
+        return node.color === "#FB7299" ? NODE_COLOR_VIP : NODE_COLOR_NORMAL;
       },
-      nodeSizeScale: 0.9,
+      nodeSizeScale: debugParams.nodeSizeScale,
       nodeGreyoutOpacity: 0.05, // 强高亮：未选中节点几乎隐藏 (0.15 → 0.05)
 
       // 边配置 - 完整优化
-      linkWidth: 2.5,
+      linkWidth: debugParams.linkWidth,
       linkColor: (link: GraphLink) => {
         // 双向关注显示金色，单向关注显示亮青色
-        return link.color || "#00D9FF";
+        return link.color || LINK_COLOR_NORMAL;
       },
       linkArrows: true,
       linkArrowsSizeScale: 1.5,
@@ -118,12 +138,12 @@ const FollowingsGraph: React.FC = () => {
 
       // 布局配置 - 使用官方默认值
       simulation: {
-        gravity: 0.0,
-        repulsion: 0.1,
+        gravity: 0.67,
+        repulsion: 2,
         repulsionTheta: 1.7,
-        linkSpring: 1.0,
-        linkDistance: 2,
-        friction: 0.85,
+        linkSpring: 0.37,
+        linkDistance: 19,
+        friction: 1,
         decay: 1000,
       },
 
@@ -202,7 +222,13 @@ const FollowingsGraph: React.FC = () => {
           ps: pageSize,
           pn: page,
         });
-        allFollowings.push(...response.data.list);
+
+        // 验证返回数据
+        if (response.data?.list && Array.isArray(response.data.list)) {
+          allFollowings.push(...response.data.list);
+        } else {
+          console.warn(`第 ${page} 页数据格式异常，跳过`);
+        }
 
         // 给用户反馈
         if (page % 5 === 0) {
@@ -287,7 +313,7 @@ const FollowingsGraph: React.FC = () => {
         uniqueNodesMap.set(id, {
           id: id,
           label: user.uname,
-          color: user.vip.vipStatus ? "#FB7299" : "#00a1d6",
+          color: user.vip.vipStatus ? NODE_COLOR_VIP : NODE_COLOR_NORMAL,
           size: 1,
         });
       }
@@ -295,10 +321,13 @@ const FollowingsGraph: React.FC = () => {
 
     const allNodes = Array.from(uniqueNodesMap.values());
 
-    // 2. 生成边，并去重
+    // 2. 生成边，并检测双向关注
     const links: GraphLink[] = [];
     const linkSet = new Set<string>(); // "source-target"
     const followingMidSet = new Set(allNodes.map((n) => parseInt(n.id)));
+
+    // 第一步：收集所有边关系（用于检测双向）
+    const edgeMap = new Map<string, { source: string; target: string }>();
 
     allNodes.forEach((node) => {
       const mid = parseInt(node.id);
@@ -310,20 +339,45 @@ const FollowingsGraph: React.FC = () => {
         if (followingMidSet.has(commonMid)) {
           const source = node.id;
           const target = commonMid.toString();
-          // 确保每条边只添加一次（Cosmograph 是有向图，但这里我们视为无向关系展示）
-          // 如果需要双向箭头，可以保留双向。这里为了避免重复计算度数，我们保留所有有向边
           const linkKey = `${source}-${target}`;
 
           if (!linkSet.has(linkKey)) {
-            if (debugParams.swapLinkDirection) {
-              links.push({ source: target, target: source });
-            } else {
-              links.push({ source, target });
-            }
+            edgeMap.set(linkKey, { source, target });
             linkSet.add(linkKey);
           }
         }
       });
+    });
+
+    // 第二步：检测双向关注并设置颜色
+    const bidirectionalSet = new Set<string>(); // 存储双向关注的边
+
+    edgeMap.forEach((edge, key) => {
+      const reverseKey = `${edge.target}-${edge.source}`;
+      // 如果反向边也存在，说明是双向关注
+      if (edgeMap.has(reverseKey)) {
+        bidirectionalSet.add(key);
+        bidirectionalSet.add(reverseKey);
+      }
+    });
+
+    // 第三步：生成最终的边列表，并根据是否双向设置颜色
+    edgeMap.forEach((edge, key) => {
+      const isBidirectional = bidirectionalSet.has(key);
+
+      if (debugParams.swapLinkDirection) {
+        links.push({
+          source: edge.target,
+          target: edge.source,
+          color: isBidirectional ? LINK_COLOR_BIDIRECTIONAL : undefined, // 金色表示双向关注
+        });
+      } else {
+        links.push({
+          source: edge.source,
+          target: edge.target,
+          color: isBidirectional ? LINK_COLOR_BIDIRECTIONAL : undefined, // 金色表示双向关注
+        });
+      }
     });
 
     // 3. 过滤孤立节点（没有任何连接的节点）
@@ -413,9 +467,12 @@ const FollowingsGraph: React.FC = () => {
 
         // 保持静态配置不被覆盖
         nodeColor: (node: GraphNode) =>
-          node.color === "#FB7299" ? "#FF4081" : "#00BCD4",
+          node.color === "#FB7299" ? NODE_COLOR_VIP : NODE_COLOR_NORMAL,
         nodeGreyoutOpacity: 0.05,
-        linkColor: "#00D9FF",
+        linkColor: (link: GraphLink) => {
+          // 双向关注显示金色，单向关注显示亮青色
+          return link.color || LINK_COLOR_NORMAL;
+        },
         linkArrows: true,
         linkArrowsSizeScale: 1.5,
         linkGreyoutOpacity: 0.05,
@@ -480,6 +537,156 @@ const FollowingsGraph: React.FC = () => {
     message.info("参数已重置为官方默认值");
   };
 
+  // 导出配置
+  const exportConfig = () => {
+    try {
+      const config = {
+        version: "1.0",
+        timestamp: new Date().toISOString(),
+        params: debugParams,
+      };
+
+      const dataStr = JSON.stringify(config, null, 2);
+      const dataBlob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `bilibili-graph-config-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      message.success("配置已导出");
+    } catch (error) {
+      message.error("导出配置失败");
+      console.error("Export error:", error);
+    }
+  };
+
+  // 导入配置
+  const importConfig = (file: File) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const config = JSON.parse(content);
+
+        // 验证配置格式
+        if (!config.params) {
+          throw new Error("无效的配置文件格式");
+        }
+
+        const params = config.params;
+
+        // 验证必需的参数
+        const requiredParams: (keyof DebugParams)[] = [
+          "nodeSizeMultiplier",
+          "nodeSizeScale",
+          "nodeMaxSize",
+          "linkWidth",
+          "gravity",
+          "repulsion",
+          "repulsionTheta",
+          "linkSpring",
+          "linkDistance",
+          "friction",
+          "showDynamicLabels",
+          "curvedLinks",
+          "swapLinkDirection",
+        ];
+
+        for (const key of requiredParams) {
+          if (params[key] === undefined) {
+            throw new Error(`配置文件缺少参数: ${key}`);
+          }
+        }
+
+        // 验证参数类型
+        if (
+          typeof params.nodeSizeMultiplier !== "number" ||
+          typeof params.nodeSizeScale !== "number" ||
+          typeof params.nodeMaxSize !== "number" ||
+          typeof params.linkWidth !== "number" ||
+          typeof params.gravity !== "number" ||
+          typeof params.repulsion !== "number" ||
+          typeof params.repulsionTheta !== "number" ||
+          typeof params.linkSpring !== "number" ||
+          typeof params.linkDistance !== "number" ||
+          typeof params.friction !== "number" ||
+          typeof params.showDynamicLabels !== "boolean" ||
+          typeof params.curvedLinks !== "boolean" ||
+          typeof params.swapLinkDirection !== "boolean"
+        ) {
+          throw new Error("配置文件包含无效的参数类型");
+        }
+
+        // 验证参数范围
+        if (
+          params.nodeSizeMultiplier < 0.1 ||
+          params.nodeSizeMultiplier > 2 ||
+          params.nodeSizeScale < 0.5 ||
+          params.nodeSizeScale > 3 ||
+          params.nodeMaxSize < 1 ||
+          params.nodeMaxSize > 10 ||
+          params.linkWidth < 1 ||
+          params.linkWidth > 5 ||
+          params.gravity < 0 ||
+          params.gravity > 1 ||
+          params.repulsion < 0 ||
+          params.repulsion > 2 ||
+          params.repulsionTheta < 0.3 ||
+          params.repulsionTheta > 2 ||
+          params.linkSpring < 0 ||
+          params.linkSpring > 2 ||
+          params.linkDistance < 1 ||
+          params.linkDistance > 20 ||
+          params.friction < 0.8 ||
+          params.friction > 1
+        ) {
+          throw new Error("配置文件包含超出范围的参数值");
+        }
+
+        // 应用配置
+        setDebugParams(params);
+        message.success("配置已导入");
+
+        // 自动应用参数
+        setTimeout(() => {
+          applyDebugParams();
+        }, 100);
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          message.error("无效的 JSON 文件");
+        } else if (error instanceof Error) {
+          message.error(error.message);
+        } else {
+          message.error("导入配置失败");
+        }
+        console.error("Import error:", error);
+      }
+    };
+
+    reader.onerror = () => {
+      message.error("读取文件失败");
+    };
+
+    reader.readAsText(file);
+  };
+
+  // 处理文件选择
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      importConfig(file);
+    }
+    // 重置input值，允许重复选择同一文件
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div
       style={{
@@ -524,13 +731,13 @@ const FollowingsGraph: React.FC = () => {
           {dataLoaded && (
             <Space split="|" style={{ color: "#666", fontSize: "13px" }}>
               <span>总关注: {stats.total}</span>
-              <span style={{ color: "#00BCD4", fontWeight: "bold" }}>
+              <span style={{ color: NODE_COLOR_NORMAL, fontWeight: "bold" }}>
                 有关系: {stats.connected}
               </span>
               <span style={{ color: "#999" }}>
                 孤立: {stats.total - stats.connected}
               </span>
-              <span style={{ color: "#FF4081" }}>关系: {stats.links}</span>
+              <span style={{ color: NODE_COLOR_VIP }}>关系: {stats.links}</span>
             </Space>
           )}
         </Space>
@@ -926,6 +1133,35 @@ const FollowingsGraph: React.FC = () => {
               </div>
             </div>
 
+            {/* 隐藏的文件输入 */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={handleFileSelect}
+            />
+
+            {/* 控制按钮 */}
+            <Space style={{ width: "100%", marginBottom: 12 }}>
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                onClick={exportConfig}
+                style={{ flex: 1 }}
+              >
+                导出
+              </Button>
+              <Button
+                size="small"
+                icon={<UploadOutlined />}
+                onClick={() => fileInputRef.current?.click()}
+                style={{ flex: 1 }}
+              >
+                导入
+              </Button>
+            </Space>
+
             <Space style={{ width: "100%", justifyContent: "space-between" }}>
               <Button size="small" onClick={resetDebugParams}>
                 重置
@@ -970,14 +1206,14 @@ const FollowingsGraph: React.FC = () => {
               <div>🌑 黑色背景（暗色主题）</div>
               <div>
                 🔵{" "}
-                <span style={{ color: "#00BCD4", fontWeight: "bold" }}>
+                <span style={{ color: NODE_COLOR_NORMAL, fontWeight: "bold" }}>
                   亮青色节点
                 </span>
                 ：普通用户
               </div>
               <div>
                 🔴{" "}
-                <span style={{ color: "#FF4081", fontWeight: "bold" }}>
+                <span style={{ color: NODE_COLOR_VIP, fontWeight: "bold" }}>
                   亮粉色节点
                 </span>
                 ：大会员用户
