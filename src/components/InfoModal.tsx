@@ -116,11 +116,12 @@ const InfoModal: React.FC<InfoModalProps> = ({ visible, onClose }) => {
       zIndex={100000}
       destroyOnClose
     >
-      <div style={{ height: "80vh" }}>
+      <div style={{ height: "80vh", display: "flex", flexDirection: "column" }}>
         <Tabs
           items={items}
           defaultActiveKey="info"
-          style={{ height: "100%" }}
+          style={{ height: "100%", display: "flex", flexDirection: "column" }}
+          tabBarStyle={{ flexShrink: 0 }}
         />
       </div>
     </Modal>

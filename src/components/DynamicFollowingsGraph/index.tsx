@@ -573,10 +573,11 @@ const DynamicFollowingsGraph: React.FC = () => {
         height: "100%",
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
       }}
     >
       {/* 控制面板 */}
-      <Card size="small" style={{ marginBottom: 8 }}>
+      <Card size="small" style={{ marginBottom: 8, flexShrink: 0 }}>
         <Row gutter={16}>
           <Col span={6}>
             <Statistic title="节点数" value={stats.nodeCount} />
@@ -647,17 +648,16 @@ const DynamicFollowingsGraph: React.FC = () => {
       </Card>
 
       {/* 图形容器 */}
-      <Card size="small" style={{ marginBottom: 8 }}>
-        <div
-          ref={containerRef}
-          style={{
-            flex: 1,
-            border: "1px solid #d9d9d9",
-            borderRadius: 4,
-            background: "#fafafa",
-          }}
-        />
-      </Card>
+      <div
+        ref={containerRef}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          border: "1px solid #d9d9d9",
+          borderRadius: 8,
+          background: "#1a1a1a",
+        }}
+      />
     </div>
   );
 };
