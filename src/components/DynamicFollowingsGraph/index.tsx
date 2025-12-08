@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Button, Space, Card, Statistic, Row, Col, Progress } from "antd";
+import {
+  Button,
+  Space,
+  Card,
+  Statistic,
+  Row,
+  Col,
+  Progress,
+  Select,
+} from "antd";
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -14,6 +23,7 @@ import {
   getFollowingsList,
   getCommonFollowings,
 } from "../../services/biliApi";
+import logger from "../../utils/logger";
 
 // ================== 类型定义 ==================
 
@@ -38,9 +48,9 @@ interface GraphNode {
   id: number;
   name: string;
   face: string;
-  neighbors?: GraphNode[];  // 邻居节点
-  links?: GraphLink[];      // 连接的边
-  x?: number;               // 由 force-graph 设置
+  neighbors?: GraphNode[]; // 邻居节点
+  links?: GraphLink[]; // 连接的边
+  x?: number; // 由 force-graph 设置
   y?: number;
 }
 
@@ -52,12 +62,26 @@ interface GraphLink {
 
 /** 加载状态 */
 interface LoadingState {
-  status: "idle" | "loading_followings" | "loading_relations" | "done" | "error";
+  status:
+    | "idle"
+    | "loading_followings"
+    | "loading_relations"
+    | "done"
+    | "error";
   current: number;
   total: number;
   currentUser?: string;
   error?: string;
 }
+
+type DagOrientation =
+  | "td"
+  | "bu"
+  | "lr"
+  | "rl"
+  | "radialout"
+  | "radialin"
+  | null;
 
 // ================== 组件 ==================
 
@@ -78,6 +102,7 @@ const DynamicFollowingsGraph: React.FC = () => {
   });
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
+  const [dagOrientation, setDagOrientation] = useState<DagOrientation>(null);
 
   // 统计信息
   const [stats, setStats] = useState({ nodeCount: 0, linkCount: 0 });
@@ -102,6 +127,8 @@ const DynamicFollowingsGraph: React.FC = () => {
       .nodeId("id")
       .nodeLabel("name")
       //.nodeRelSize(NODE_R)
+      .width(containerRef.current.clientWidth)
+      .height(containerRef.current.clientHeight)
       // 节点 hover 处理
       .onNodeHover((node: any) => {
         highlightNodesRef.current.clear();
@@ -109,14 +136,18 @@ const DynamicFollowingsGraph: React.FC = () => {
 
         if (node) {
           highlightNodesRef.current.add(node);
-          node.neighbors?.forEach((neighbor: any) => highlightNodesRef.current.add(neighbor));
-          node.links?.forEach((link: any) => highlightLinksRef.current.add(link));
+          node.neighbors?.forEach((neighbor: any) =>
+            highlightNodesRef.current.add(neighbor),
+          );
+          node.links?.forEach((link: any) =>
+            highlightLinksRef.current.add(link),
+          );
         }
 
         hoverNodeRef.current = node;
         // 更新容器样式
         if (containerRef.current) {
-          containerRef.current.style.cursor = node ? 'pointer' : 'default';
+          containerRef.current.style.cursor = node ? "pointer" : "default";
         }
       })
       // 边 hover 处理
@@ -137,33 +168,64 @@ const DynamicFollowingsGraph: React.FC = () => {
       // 保持重绘（用于 hover 效果）
       .autoPauseRedraw(false)
       // 边宽度根据高亮状态变化
-      .linkWidth((link: any) => highlightLinksRef.current.has(link) ? 3 : 1)
+      .linkWidth((link: any) => (highlightLinksRef.current.has(link) ? 3 : 1))
       // 边方向粒子
       .linkDirectionalParticles(4)
-      .linkDirectionalParticleWidth((link: any) => highlightLinksRef.current.has(link) ? 4 : 0)
+      .linkDirectionalParticleWidth((link: any) =>
+        highlightLinksRef.current.has(link) ? 4 : 0,
+      )
       // 节点自定义渲染模式
       .nodeCanvasObjectMode((node: any) =>
-        highlightNodesRef.current.has(node) ? 'before' : undefined
+        highlightNodesRef.current.has(node) ? "before" : undefined,
       )
       // 节点自定义渲染（绘制高亮光环）
       .nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D) => {
         if (!node.x || !node.y) return;
         ctx.beginPath();
         ctx.arc(node.x, node.y, NODE_R * 0.56, 0, 2 * Math.PI, false);
-        ctx.fillStyle = node === hoverNodeRef.current ? '#b535ffb0' : '#ffd93d';
+        ctx.fillStyle = node === hoverNodeRef.current ? "#b535ffb0" : "#ffd93d";
         ctx.fill();
       })
       // 节点颜色
-      .nodeColor(() => '#4ecdc4');
+      .nodeColor(() => "#4ecdc4");
 
     graphRef.current = graph;
 
+    // 添加 ResizeObserver
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        graph.width(width);
+        graph.height(height);
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      resizeObserver.disconnect();
       if (graphRef.current) {
         graphRef.current._destructor();
       }
     };
   }, []);
+
+  // 更新 DAG 方向
+  useEffect(() => {
+    if (!graphRef.current) return;
+
+    // 设置 DAG 模式
+    graphRef.current.dagMode(dagOrientation);
+
+    // 如果启用了 DAG 模式，设置层级距离
+    if (dagOrientation) {
+      graphRef.current.dagLevelDistance(200);
+    }
+
+    // 重新加热模拟以应用布局更改
+    graphRef.current.d3Force("charge")?.strength(-100); // 调整斥力
+    graphRef.current.d3ReheatSimulation();
+  }, [dagOrientation]);
 
   // 当数据更新时，重新渲染图形
   useEffect(() => {
@@ -181,7 +243,7 @@ const DynamicFollowingsGraph: React.FC = () => {
   /** 将 UserData + RelationMap 转换为图数据 */
   const transformToGraphData = (
     userData: UserData,
-    relationMap: RelationMap
+    relationMap: RelationMap,
   ): { nodes: GraphNode[]; links: GraphLink[] } => {
     // 创建 uid → UserInfo 映射
     const userInfoMap = new Map<number, UserInfo>();
@@ -222,11 +284,13 @@ const DynamicFollowingsGraph: React.FC = () => {
 
     // 建立邻居关系（用于 hover 高亮）
     const nodeMap = new Map<number, GraphNode>();
-    nodes.forEach(node => nodeMap.set(node.id, node));
+    nodes.forEach((node) => nodeMap.set(node.id, node));
 
-    links.forEach(link => {
-      const sourceId = typeof link.source === 'number' ? link.source : link.source.id;
-      const targetId = typeof link.target === 'number' ? link.target : link.target.id;
+    links.forEach((link) => {
+      const sourceId =
+        typeof link.source === "number" ? link.source : link.source.id;
+      const targetId =
+        typeof link.target === "number" ? link.target : link.target.id;
       const a = nodeMap.get(sourceId);
       const b = nodeMap.get(targetId);
 
@@ -270,7 +334,12 @@ const DynamicFollowingsGraph: React.FC = () => {
           myMid = await getCurrentUserMidFromAPI();
         } catch {
           message.error("无法获取用户 ID，请确保已登录");
-          setLoadingState({ status: "error", current: 0, total: 0, error: "未登录" });
+          setLoadingState({
+            status: "error",
+            current: 0,
+            total: 0,
+            error: "未登录",
+          });
           return;
         }
       }
@@ -283,7 +352,11 @@ const DynamicFollowingsGraph: React.FC = () => {
       let page = 1;
       const pageSize = 50;
 
-      const firstResponse = await getFollowingsList({ vmid: myMid, ps: pageSize, pn: 1 });
+      const firstResponse = await getFollowingsList({
+        vmid: myMid,
+        ps: pageSize,
+        pn: 1,
+      });
       const total = firstResponse.data.total;
       const totalPages = Math.ceil(total / pageSize);
 
@@ -300,7 +373,11 @@ const DynamicFollowingsGraph: React.FC = () => {
       for (page = 2; page <= totalPages; page++) {
         if (isPausedRef.current) await waitForResume();
 
-        const response = await getFollowingsList({ vmid: myMid, ps: pageSize, pn: page });
+        const response = await getFollowingsList({
+          vmid: myMid,
+          ps: pageSize,
+          pn: page,
+        });
         response.data.list.forEach((item) => {
           allFollowings.push({
             uid: item.mid,
@@ -327,7 +404,11 @@ const DynamicFollowingsGraph: React.FC = () => {
       message.success(`成功加载 ${allFollowings.length} 个关注`);
 
       // Step 3: 获取每个关注对象的共同关注
-      setLoadingState({ status: "loading_relations", current: 0, total: allFollowings.length });
+      setLoadingState({
+        status: "loading_relations",
+        current: 0,
+        total: allFollowings.length,
+      });
       message.info("正在加载共同关注数据...");
 
       const newRelationMap = new Map<number, number[]>();
@@ -356,23 +437,36 @@ const DynamicFollowingsGraph: React.FC = () => {
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
         } catch (error) {
-          console.error(`获取 ${user.name} 的共同关注失败:`, error);
+          logger.error(`获取 ${user.name} 的共同关注失败:`, error);
           newRelationMap.set(user.uid, []);
         }
       }
 
-      setLoadingState({ status: "done", current: allFollowings.length, total: allFollowings.length });
+      setLoadingState({
+        status: "done",
+        current: allFollowings.length,
+        total: allFollowings.length,
+      });
       message.success("数据加载完成！");
     } catch (error) {
-      console.error("加载失败:", error);
+      logger.error("加载失败:", error);
       message.error(error instanceof Error ? error.message : "加载失败");
-      setLoadingState({ status: "error", current: 0, total: 0, error: String(error) });
+      setLoadingState({
+        status: "error",
+        current: 0,
+        total: 0,
+        error: String(error),
+      });
     }
   }, [message]);
 
   /** 开始/暂停按钮 */
   const handleStartPause = () => {
-    if (loadingState.status === "idle" || loadingState.status === "done" || loadingState.status === "error") {
+    if (
+      loadingState.status === "idle" ||
+      loadingState.status === "done" ||
+      loadingState.status === "error"
+    ) {
       // 开始加载
       setIsPaused(false);
       isPausedRef.current = false;
@@ -407,8 +501,10 @@ const DynamicFollowingsGraph: React.FC = () => {
     const connectedNodeIds = new Set<number>();
     links.forEach((link: any) => {
       // link.source 和 link.target 可能是对象或 ID
-      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+      const sourceId =
+        typeof link.source === "object" ? link.source.id : link.source;
+      const targetId =
+        typeof link.target === "object" ? link.target.id : link.target;
       connectedNodeIds.add(sourceId);
       connectedNodeIds.add(targetId);
     });
@@ -462,11 +558,23 @@ const DynamicFollowingsGraph: React.FC = () => {
     }
   };
 
-  const isLoading = loadingState.status === "loading_followings" || loadingState.status === "loading_relations";
-  const progress = loadingState.total > 0 ? Math.round((loadingState.current / loadingState.total) * 100) : 0;
+  const isLoading =
+    loadingState.status === "loading_followings" ||
+    loadingState.status === "loading_relations";
+  const progress =
+    loadingState.total > 0
+      ? Math.round((loadingState.current / loadingState.total) * 100)
+      : 0;
 
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {/* 控制面板 */}
       <Card size="small" style={{ marginBottom: 8 }}>
         <Row gutter={16}>
@@ -477,7 +585,11 @@ const DynamicFollowingsGraph: React.FC = () => {
             <Statistic title="连线数" value={stats.linkCount} />
           </Col>
           <Col span={12}>
-            <Statistic title="状态" value={getStatusText()} valueStyle={{ fontSize: 14 }} />
+            <Statistic
+              title="状态"
+              value={getStatusText()}
+              valueStyle={{ fontSize: 14 }}
+            />
           </Col>
         </Row>
 
@@ -495,11 +607,32 @@ const DynamicFollowingsGraph: React.FC = () => {
         <Space style={{ marginTop: 16 }}>
           <Button
             type="primary"
-            icon={isPaused || !isLoading ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+            icon={
+              isPaused || !isLoading ? (
+                <PlayCircleOutlined />
+              ) : (
+                <PauseCircleOutlined />
+              )
+            }
             onClick={handleStartPause}
           >
             {getButtonText()}
           </Button>
+
+          <Select
+            value={dagOrientation}
+            onChange={setDagOrientation}
+            style={{ width: 120 }}
+            options={[
+              { label: "自由布局", value: null },
+              { label: "上下 (TD)", value: "td" },
+              { label: "下上 (BU)", value: "bu" },
+              { label: "左右 (LR)", value: "lr" },
+              { label: "右左 (RL)", value: "rl" },
+              { label: "径向向外", value: "radialout" },
+              { label: "径向向内", value: "radialin" },
+            ]}
+          />
           <Button icon={<ReloadOutlined />} onClick={handleResetView}>
             重置视图
           </Button>
@@ -514,15 +647,17 @@ const DynamicFollowingsGraph: React.FC = () => {
       </Card>
 
       {/* 图形容器 */}
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          border: "1px solid #d9d9d9",
-          borderRadius: 4,
-          background: "#fafafa",
-        }}
-      />
+      <Card size="small" style={{ marginBottom: 8 }}>
+        <div
+          ref={containerRef}
+          style={{
+            flex: 1,
+            border: "1px solid #d9d9d9",
+            borderRadius: 4,
+            background: "#fafafa",
+          }}
+        />
+      </Card>
     </div>
   );
 };

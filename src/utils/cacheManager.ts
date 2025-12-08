@@ -3,14 +3,15 @@
  * 支持 IndexedDB（优先）和 localStorage（降级）双存储
  */
 
-import { indexedDBManager } from './indexedDBManager';
+import { indexedDBManager } from "./indexedDBManager";
+import logger from "./logger";
 
 interface CacheItem<T> {
   data: T;
   expiry: number; // 过期时间戳
 }
 
-type StorageType = 'localStorage' | 'indexedDB' | 'auto';
+type StorageType = "localStorage" | "indexedDB" | "auto";
 
 interface CacheConfig {
   expiryDays: number; // 过期天数，默认 30 天
@@ -19,11 +20,11 @@ interface CacheConfig {
 
 const DEFAULT_CONFIG: CacheConfig = {
   expiryDays: 30, // 30天（1个月）
-  storage: 'auto', // 自动选择：优先 IndexedDB，降级到 localStorage
+  storage: "auto", // 自动选择：优先 IndexedDB，降级到 localStorage
 };
 
 class CacheManager {
-  private prefix = 'bilibili_helper_';
+  private prefix = "bilibili_helper_";
   private config: CacheConfig;
 
   constructor(config: Partial<CacheConfig> = {}) {
@@ -37,13 +38,13 @@ class CacheManager {
     const storage = this.config.storage;
 
     // IndexedDB 优先
-    if (storage === 'indexedDB' || storage === 'auto') {
+    if (storage === "indexedDB" || storage === "auto") {
       try {
         await indexedDBManager.set(key, data);
         return;
       } catch (error) {
-        console.warn('IndexedDB 写入失败，降级到 localStorage:', error);
-        if (storage === 'indexedDB') {
+        logger.warn("IndexedDB 写入失败，降级到 localStorage:", error);
+        if (storage === "indexedDB") {
           throw error; // 如果明确指定只用 IndexedDB，则抛出错误
         }
       }
@@ -70,7 +71,7 @@ class CacheManager {
     try {
       localStorage.setItem(this.prefix + key, JSON.stringify(cacheItem));
     } catch (error) {
-      console.error('localStorage 写入失败:', error);
+      logger.error("localStorage 写入失败:", error);
     }
   }
 
@@ -81,7 +82,7 @@ class CacheManager {
     const storage = this.config.storage;
 
     // IndexedDB 优先
-    if (storage === 'indexedDB' || storage === 'auto') {
+    if (storage === "indexedDB" || storage === "auto") {
       try {
         const data = await indexedDBManager.get<T>(key);
         if (data !== null) {
@@ -89,12 +90,12 @@ class CacheManager {
         }
         // IndexedDB 中没有，继续尝试 localStorage（可能是旧数据）
       } catch (error) {
-        console.warn('IndexedDB 读取失败，降级到 localStorage:', error);
+        logger.warn("IndexedDB 读取失败，降级到 localStorage:", error);
       }
     }
 
     // localStorage 降级或备份读取
-    if (storage === 'localStorage' || storage === 'auto') {
+    if (storage === "localStorage" || storage === "auto") {
       return this.getSync<T>(key);
     }
 
@@ -126,7 +127,7 @@ class CacheManager {
 
       return cacheItem.data;
     } catch (error) {
-      console.error('localStorage 读取失败:', error);
+      logger.error("localStorage 读取失败:", error);
       return null;
     }
   }
@@ -138,7 +139,7 @@ class CacheManager {
     try {
       await indexedDBManager.remove(key);
     } catch (error) {
-      console.warn('IndexedDB 删除失败:', error);
+      logger.warn("IndexedDB 删除失败:", error);
     }
     this.remove(key);
   }
@@ -150,7 +151,7 @@ class CacheManager {
     try {
       localStorage.removeItem(this.prefix + key);
     } catch (error) {
-      console.error('localStorage 删除失败:', error);
+      logger.error("localStorage 删除失败:", error);
     }
   }
 
@@ -161,7 +162,7 @@ class CacheManager {
     try {
       await indexedDBManager.clear();
     } catch (error) {
-      console.warn('IndexedDB 清除失败:', error);
+      logger.warn("IndexedDB 清除失败:", error);
     }
     this.clear();
   }
@@ -178,7 +179,7 @@ class CacheManager {
         }
       });
     } catch (error) {
-      console.error('localStorage 清除失败:', error);
+      logger.error("localStorage 清除失败:", error);
     }
   }
 
@@ -192,4 +193,3 @@ class CacheManager {
 
 // 导出单例
 export const cacheManager = new CacheManager();
-

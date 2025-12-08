@@ -11,9 +11,6 @@ import {
 } from "@ant-design/icons";
 import FansList from "./FansList";
 import FollowingsList from "./FollowingsList";
-import FollowingsGraph from "./FollowingsGraph/index";
-import ForceGraphView from "./ForceGraphView/index";
-import DAGGraphView from "./DAGGraphView/index";
 import DynamicFollowingsGraph from "./DynamicFollowingsGraph/index";
 import metadata from "../metadata.json";
 
@@ -95,36 +92,6 @@ const InfoModal: React.FC<InfoModalProps> = ({ visible, onClose }) => {
         </span>
       ),
       children: <FollowingsList />,
-    },
-    {
-      key: "graph",
-      label: (
-        <span>
-          <ApartmentOutlined />
-          关注网络图 (Cosmograph)
-        </span>
-      ),
-      children: <FollowingsGraph />,
-    },
-    {
-      key: "forcegraph",
-      label: (
-        <span>
-          <ApartmentOutlined />
-          关注网络图 (Force-Graph)
-        </span>
-      ),
-      children: <ForceGraphView />,
-    },
-    {
-      key: "daggraph",
-      label: (
-        <span>
-          <ApartmentOutlined />
-          DAG 层级图演示
-        </span>
-      ),
-      children: <DAGGraphView />,
     },
     {
       key: "dynamicgraph",
