@@ -9,24 +9,24 @@
   <img src="https://img.shields.io/badge/TypeScript-5.3.3-3178c6?logo=typescript" alt="TypeScript">
   <img src="https://img.shields.io/badge/Ant%20Design-5.12.5-0170fe?logo=antdesign" alt="Ant Design">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
-  <img src="https://img.shields.io/badge/Version-0.0.7-blue" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.6-blue" alt="Version">
 </p>
 
-## 📖 项目简介
+## 项目简介
 
 这是一个现代化的油猴脚本（Userscript）项目，使用 React 18 框架和 Ant Design 5 组件库构建。脚本为哔哩哔哩网站提供了增强功能，帮助用户更好地管理和可视化社交关系。
 
-### ✨ 核心特性
+### 核心特性
 
-- 🎯 **粉丝列表查看** - 分页浏览粉丝，查看详细信息和关注关系
-- 👥 **关注列表管理** - 查看关注用户，支持展开共同关注
-- 🕸️ **关注网络图** - 交互式可视化关注关系网络
-- 🎨 **现代化 UI** - 基于 Ant Design 5 的专业界面
-- 📱 **响应式设计** - 适配不同屏幕尺寸
-- 💾 **智能缓存** - LocalStorage 缓存，减少 API 调用
-- ⚡ **性能优化** - 批量加载，分页处理，流畅体验
+- 粉丝列表查看 - 分页浏览粉丝，查看详细信息和关注关系
+- 关注列表管理 - 查看关注用户，支持展开共同关注
+- 关注网络图 - 交互式可视化关注关系网络
+- 现代化 UI - 基于 Ant Design 5 的专业界面
+- 响应式设计 - 适配不同屏幕尺寸
+- 智能缓存 - LocalStorage 缓存，减少 API 调用
+- 性能优化 - 批量加载，分页处理，流畅体验
 
-## ⚠️ 重要声明
+## 重要声明
 
 **本项目仅供学习和研究使用，请勿用于任何商业用途或违反相关服务条款的行为。**
 
@@ -45,39 +45,39 @@
 
 ---
 
-## 📸 功能预览
+## 功能预览
 
 ![关注网络图可视化](resources/run.png)
 
 <p align="center"><em>关注网络图功能：交互式可视化展示关注关系网络，支持节点悬停、点击交互和参数调试</em></p>
 
-## 🚀 主要功能
+## 主要功能
 
-### 1️⃣ 粉丝列表
-- 📊 分页加载粉丝列表（每页 20 条）
-- 👤 显示用户头像、昵称、签名
-- 🏷️ 认证状态、大会员标识
-- 💫 关注关系标签（未关注/已关注/互相关注/已拉黑）
-- 🔗 点击跳转用户空间
-- ⏰ 关注时间显示
+### 粉丝列表
+- 分页加载粉丝列表（每页 20 条）
+- 显示用户头像、昵称、签名
+- 认证状态、大会员标识
+- 关注关系标签（未关注/已关注/互相关注/已拉黑）
+- 点击跳转用户空间
+- 关注时间显示
 
-### 2️⃣ 关注列表
-- 📋 分页浏览关注用户
-- 🤝 **共同关注展开** - 点击展开查看与该用户的共同关注
-- 📈 共同关注数量统计
-- 🎯 批量加载优化（5个/批，500ms延迟）
-- 🖼️ 网格布局展示共同关注
+### 关注列表
+- 分页浏览关注用户
+- **共同关注展开** - 点击展开查看与该用户的共同关注
+- 共同关注数量统计
+- 批量加载优化（5个/批，500ms延迟）
+- 网格布局展示共同关注
 
-### 3️⃣ 关注网络图
-- 🌐 **交互式网络可视化** - 基于 Cosmograph WebGL 渲染
-- 🎨 **节点着色** - 普通用户（青色）/ 大会员（粉色）
-- 📏 **动态节点大小** - 根据关注关系数量自动调整
-- 🖱️ **鼠标交互**
+### 关注网络图
+- **交互式网络可视化** - 基于 Cosmograph WebGL 渲染
+- **节点着色** - 普通用户（青色）/ 大会员（粉色）
+- **动态节点大小** - 根据关注关系数量自动调整
+- **鼠标交互**
   - 悬停：显示用户名 + 高亮邻接节点
   - 点击：跳转用户空间
-- 🧪 **调试面板** - 实时调整物理参数（重力、斥力、摩擦力等）
-- 📊 **统计信息** - 总关注数、有关系节点、孤立节点、边数
-- 🔍 **智能过滤** - 自动隐藏孤立节点
+- **调试面板** - 实时调整物理参数（重力、斥力、摩擦力等）
+- **统计信息** - 总关注数、有关系节点、孤立节点、边数
+- **智能过滤** - 自动隐藏孤立节点
 
 ## 技术栈
 
@@ -93,7 +93,7 @@
 - Node.js 16+
 - pnpm (推荐) / npm / yarn
 
-## 📦 安装与使用
+## 安装与使用
 
 ### 方式一：直接安装（推荐用户）
 
@@ -106,7 +106,7 @@
 
 3. **使用脚本**
    - 访问任意哔哩哔哩用户空间页面（`space.bilibili.com/:uid`）
-   - 点击页面右下角的 🚀 浮动按钮
+   - 点击页面右下角的浮动按钮
    - 在弹出的窗口中选择功能标签页
 
 ### 方式二：开发调试
@@ -163,46 +163,46 @@ pnpm build:minor
 pnpm type-check
 ```
 
-## 📁 项目结构
+## 项目结构
 
 ```
 BilibiliRelationMap/
 ├── src/
 │   ├── components/              # React 组件
-│   │   ├── FloatingButton.tsx   # 🚀 浮动按钮组件（脚本入口）
-│   │   ├── InfoModal.tsx        # 📋 信息弹窗组件（主容器）
-│   │   ├── FansList.tsx         # 👥 粉丝列表组件
-│   │   ├── FollowingsList.tsx   # 💫 关注列表组件（支持共同关注展开）
-│   │   └── FollowingsGraph.tsx  # 🕸️ 关注网络图组件（~1000 行）
+│   │   ├── FloatingButton.tsx   # 浮动按钮组件（脚本入口）
+│   │   ├── InfoModal.tsx        # 信息弹窗组件（主容器）
+│   │   ├── FansList.tsx         # 粉丝列表组件
+│   │   ├── FollowingsList.tsx   # 关注列表组件（支持共同关注展开）
+│   │   └── FollowingsGraph.tsx  # 关注网络图组件（~1000 行）
 │   ├── services/                # 业务逻辑层
-│   │   └── biliApi.ts           # 📡 Bilibili API 调用封装
+│   │   └── biliApi.ts           # Bilibili API 调用封装
 │   ├── contexts/                # React Context
-│   │   └── AppContext.tsx       # 🌐 应用全局上下文
+│   │   └── AppContext.tsx       # 应用全局上下文
 │   ├── types/                   # TypeScript 类型定义
-│   │   └── bilibili.ts          # 📝 Bilibili API 响应类型
+│   │   └── bilibili.ts          # Bilibili API 响应类型
 │   ├── utils/                   # 工具函数
-│   │   └── cacheManager.ts      # 💾 LocalStorage 缓存管理
+│   │   └── cacheManager.ts      # LocalStorage 缓存管理
 │   ├── styles/                  # 样式文件
-│   │   └── index.css            # 🎨 全局样式
-│   ├── App.tsx                  # ⚛️ React 应用主组件
-│   ├── index.tsx                # 🚪 入口文件（DOM 挂载）
-│   └── metadata.json            # 📄 油猴脚本元数据
+│   │   └── index.css            # 全局样式
+│   ├── App.tsx                  # React 应用主组件
+│   ├── index.tsx                # 入口文件（DOM 挂载）
+│   └── metadata.json            # 油猴脚本元数据
 ├── scripts/                     # 构建脚本
-│   └── bump-version.cjs         # 🔢 版本号递增脚本
+│   └── bump-version.cjs         # 版本号递增脚本
 ├── resources/                   # 资源文件
-│   └── run.png                  # 📸 运行截图
+│   └── run.png                  # 运行截图
 ├── dist/                        # 构建输出目录
-│   └── script.user.js           # 🎯 最终打包的油猴脚本
-├── webpack.config.cjs           # ⚙️ Webpack 配置（生产）
-├── webpack.config.ts            # ⚙️ Webpack 配置（TypeScript）
-├── tsconfig.json                # 📘 TypeScript 配置
-├── package.json                 # 📦 项目依赖和脚本
-├── .gitignore                   # 🚫 Git 忽略文件
-├── LICENSE                      # 📜 MIT 许可证
-└── README.md                    # 📖 项目文档
+│   └── script.user.js           # 最终打包的油猴脚本
+├── webpack.config.cjs           # Webpack 配置（生产）
+├── webpack.config.ts            # Webpack 配置（TypeScript）
+├── tsconfig.json                # TypeScript 配置
+├── package.json                 # 项目依赖和脚本
+├── .gitignore                   # Git 忽略文件
+├── LICENSE                      # MIT 许可证
+└── README.md                    # 项目文档
 ```
 
-## 🛠️ 开发说明
+## 开发说明
 
 ### 构建流程
 
@@ -312,7 +312,7 @@ const graph = new Cosmograph({
 })
 ```
 
-## 📚 主要依赖
+## 主要依赖
 
 ### 运行时依赖
 
@@ -337,7 +337,7 @@ const graph = new Cosmograph({
 | `css-loader` | 6.8.1 | CSS 加载器 |
 | `style-loader` | 3.3.3 | 样式注入器 |
 
-## ❓ 常见问题
+## 常见问题
 
 <details>
 <summary><strong>Q: 脚本为什么无法加载？</strong></summary>
@@ -381,7 +381,7 @@ A:
 5. 重新构建：`pnpm build`
 </details>
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [ ] 支持更多数据维度（关注时长、互动频率等）
 - [ ] 添加关系分析功能（关注圈分析、影响力评估）
@@ -391,7 +391,7 @@ A:
 - [ ] 多语言支持（英文）
 - [ ] 移动端适配优化
 
-## 🤝 贡献指南
+## 贡献指南
 
 欢迎提交 Issue 和 Pull Request！
 
@@ -408,7 +408,7 @@ A:
 - 组件使用函数式写法
 - 添加必要的类型注解和注释
 
-## 🙏 致谢
+## 致谢
 
 - [Bilibili-Evolved](https://github.com/the1812/Bilibili-Evolved) - 构建方案参考
 - [Cosmograph](https://cosmograph.app/) - 图形可视化库
@@ -417,6 +417,6 @@ A:
 
 ## Star History
 
-如果这个项目对你有帮助，欢迎给个 Star ⭐️
+如果这个项目对你有帮助，欢迎给个 Star
 
 [![Star History Chart](https://api.star-history.com/svg?repos=irisWirisW/BilibiliRelationMap&type=date&legend=top-left)](https://www.star-history.com/#irisWirisW/BilibiliRelationMap&type=date&legend=top-left)

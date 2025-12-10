@@ -1,13 +1,44 @@
 {
     "name": "Bilibili React Helper",
     "namespace": "bilibili-react-helper",
-    "version": "0.4.1",
+    "version": "0.4.6",
     "description": "基于 React + TypeScript + Ant Design 的哔哩哔哩增强脚本",
     "author": "1ris_W",
-    "match": "*://*.bilibili.com/*",
+    "license": "AGPL3",
+    "match": "*://space.bilibili.com/*",
     "grant": [
         "GM_xmlhttpRequest",
-        "GM_cookie"
+        "GM_cookie",
+        "unsafeWindow",
+        "GM_getValue",
+        "GM_setValue",
+        "GM_deleteValue",
+        "GM_info",
+        "GM_xmlhttpRequest",
+        "GM_registerMenuCommand",
+        "GM_unregisterMenuCommand"
     ],
-    "run-at": "document-end"
+    "connect": [
+        "raw.githubusercontent.com",
+        "github.com",
+        "[altCdn.host]",
+        "cn.bing.com",
+        "www.bing.com",
+        "translate.google.cn",
+        "translate.google.com",
+        "localhost",
+        "*"
+    ],
+    "run-at": "document-start",
+    "exclude": [
+        "*://api.bilibili.com/*",
+        "*://api.*.bilibili.com/*",
+        "*://*.bilibili.com/api/*",
+        "*://member.bilibili.com/studio/bs-editor/*",
+        "*://t.bilibili.com/h5/dynamic/specification",
+        "*://bbq.bilibili.com/*",
+        "*://message.bilibili.com/pages/nav/header_sync",
+        "*://s1.hdslb.com/bfs/seed/jinkela/short/cols/iframe.html",
+        "*://open-live.bilibili.com/*"
+    ]
 }

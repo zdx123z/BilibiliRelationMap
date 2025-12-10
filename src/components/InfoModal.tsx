@@ -174,7 +174,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ visible, onClose }) => {
       <div style={{ textAlign: "center" }}>
         <Space split={<Divider type="vertical" />}>
           <a
-            href="https://github.com"
+            href="https://github.com/irisWirisW/BilibiliRelationMap"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "#666" }}
@@ -239,9 +239,9 @@ const InfoModal: React.FC<InfoModalProps> = ({ visible, onClose }) => {
       width={1200}
       style={{ top: 20 }}
       zIndex={100000}
-      destroyOnClose
+      destroyOnHidden
     >
-      <div style={{ height: "80vh", display: "flex", flexDirection: "column" }}>
+      <div style={{ height: "90vh", display: "flex", flexDirection: "column" }}>
         <Tabs
           items={items}
           defaultActiveKey="info"
