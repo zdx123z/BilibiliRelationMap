@@ -27,30 +27,44 @@ import logger from "../../utils/logger";
 
 // ================== 类型定义 ==================
 
-/** 用户基础信息 */
-interface UserInfo {
-  uid: number;
-  name: string;
-  face: string;
-}
-
-/** 用户数据（我 + 我的关注） */
+/** 用户数据 */
 interface UserData {
-  me: UserInfo;
-  followings: UserInfo[];
+  uid: number;
+  uname: string;
+  face: string;
+  /**
+   * 来源: 共同关注 API（对于他人）/ 关注列表 API（对于自己）
+   * 对于「我」: 我关注的所有人的 uid
+   * 对于「他人」: 该用户关注的人中，与我有共同关注的部分
+   */
+  following: number[];
+  /**
+   * 来源: 关注列表 API
+   * 含义: 该用户关注的人（深度探索时获取）
+   * 对于「我」: 不需要获取，与 following 相同
+   */
+  deepFollowing: number[];
+  /**
+   * 来源: 追随者列表 API
+   * 含义: 关注了该用户的人（深度探索时获取）
+   */
+  deepFollower: number[];
 }
 
-/** 关系数据：用户ID → 该用户关注的人的ID列表 */
-type RelationMap = Map<number, number[]>;
+/** 应用状态 */
+interface AppState {
+  myUid: number;
+  users: Map<number, UserData>;
+}
 
 /** 图节点 */
 interface GraphNode {
   id: number;
   name: string;
   face: string;
-  neighbors?: GraphNode[]; // 邻居节点
-  links?: GraphLink[]; // 连接的边
-  x?: number; // 由 force-graph 设置
+  neighbors?: GraphNode[];
+  links?: GraphLink[];
+  x?: number;
   y?: number;
 }
 
@@ -90,9 +104,11 @@ const DynamicFollowingsGraph: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraph | null>(null);
 
-  // 数据状态
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [relationMap, setRelationMap] = useState<RelationMap>(new Map());
+  // 数据状态 - 使用统一的 AppState
+  const [appState, setAppState] = useState<AppState>({
+    myUid: 0,
+    users: new Map(),
+  });
 
   // 加载状态
   const [loadingState, setLoadingState] = useState<LoadingState>({
@@ -126,10 +142,8 @@ const DynamicFollowingsGraph: React.FC = () => {
     const graph = new ForceGraph(containerRef.current)
       .nodeId("id")
       .nodeLabel("name")
-      //.nodeRelSize(NODE_R)
       .width(containerRef.current.clientWidth)
       .height(containerRef.current.clientHeight)
-      // 节点 hover 处理
       .onNodeHover((node: any) => {
         highlightNodesRef.current.clear();
         highlightLinksRef.current.clear();
@@ -145,12 +159,10 @@ const DynamicFollowingsGraph: React.FC = () => {
         }
 
         hoverNodeRef.current = node;
-        // 更新容器样式
         if (containerRef.current) {
           containerRef.current.style.cursor = node ? "pointer" : "default";
         }
       })
-      // 边 hover 处理
       .onLinkHover((link: any) => {
         highlightNodesRef.current.clear();
         highlightLinksRef.current.clear();
@@ -161,24 +173,18 @@ const DynamicFollowingsGraph: React.FC = () => {
           if (link.target) highlightNodesRef.current.add(link.target);
         }
       })
-      // 节点点击
       .onNodeClick((node: any) => {
         window.open(`https://space.bilibili.com/${node.id}`, "_blank");
       })
-      // 保持重绘（用于 hover 效果）
       .autoPauseRedraw(false)
-      // 边宽度根据高亮状态变化
       .linkWidth((link: any) => (highlightLinksRef.current.has(link) ? 3 : 1))
-      // 边方向粒子
       .linkDirectionalParticles(4)
       .linkDirectionalParticleWidth((link: any) =>
         highlightLinksRef.current.has(link) ? 4 : 0,
       )
-      // 节点自定义渲染模式
       .nodeCanvasObjectMode((node: any) =>
         highlightNodesRef.current.has(node) ? "before" : undefined,
       )
-      // 节点自定义渲染（绘制高亮光环）
       .nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D) => {
         if (!node.x || !node.y) return;
         ctx.beginPath();
@@ -186,12 +192,10 @@ const DynamicFollowingsGraph: React.FC = () => {
         ctx.fillStyle = node === hoverNodeRef.current ? "#b535ffb0" : "#ffd93d";
         ctx.fill();
       })
-      // 节点颜色
       .nodeColor(() => "#4ecdc4");
 
     graphRef.current = graph;
 
-    // 添加 ResizeObserver
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
@@ -214,68 +218,110 @@ const DynamicFollowingsGraph: React.FC = () => {
   useEffect(() => {
     if (!graphRef.current) return;
 
-    // 设置 DAG 模式
     graphRef.current.dagMode(dagOrientation);
 
-    // 如果启用了 DAG 模式，设置层级距离
     if (dagOrientation) {
       graphRef.current.dagLevelDistance(200);
     }
 
-    // 重新加热模拟以应用布局更改
-    graphRef.current.d3Force("charge")?.strength(-100); // 调整斥力
+    graphRef.current.d3Force("charge")?.strength(-100);
     graphRef.current.d3ReheatSimulation();
   }, [dagOrientation]);
 
-  // 当数据更新时，重新渲染图形
+  // 当数据更新时，增量更新图形（避免闪烁）
   useEffect(() => {
-    if (!graphRef.current || !userData) return;
+    if (!graphRef.current || appState.myUid === 0) return;
 
-    const graphData = transformToGraphData(userData, relationMap);
-    graphRef.current.graphData(graphData);
+    const { nodes: currentNodes, links: currentLinks } =
+      graphRef.current.graphData();
+    const newGraphData = transformToGraphData(appState);
+
+    // 构建已有节点的 Map（保留位置信息）
+    const existingNodeMap = new Map<number, GraphNode>();
+    (currentNodes as GraphNode[]).forEach((n) => existingNodeMap.set(n.id, n));
+
+    // 复用已有节点，只添加新节点
+    const mergedNodes = newGraphData.nodes.map((node) => {
+      const existing = existingNodeMap.get(node.id);
+      if (existing) {
+        // 保留位置，更新其他属性
+        existing.name = node.name;
+        existing.face = node.face;
+        existing.neighbors = node.neighbors;
+        existing.links = node.links;
+        return existing;
+      }
+      return node;
+    });
+
+    // 构建已有链接的 Set
+    const existingLinkSet = new Set<string>();
+    (currentLinks as GraphLink[]).forEach((l) => {
+      const sourceId = typeof l.source === "object" ? l.source.id : l.source;
+      const targetId = typeof l.target === "object" ? l.target.id : l.target;
+      existingLinkSet.add(`${sourceId}-${targetId}`);
+    });
+
+    // 复用已有链接，只添加新链接
+    const newLinks = newGraphData.links.filter((link) => {
+      const sourceId =
+        typeof link.source === "number" ? link.source : link.source.id;
+      const targetId =
+        typeof link.target === "number" ? link.target : link.target.id;
+      return !existingLinkSet.has(`${sourceId}-${targetId}`);
+    });
+
+    const mergedLinks = [...currentLinks, ...newLinks];
+
+    graphRef.current.graphData({
+      nodes: mergedNodes,
+      links: mergedLinks,
+    });
 
     setStats({
-      nodeCount: graphData.nodes.length,
-      linkCount: graphData.links.length,
+      nodeCount: mergedNodes.length,
+      linkCount: mergedLinks.length,
     });
-  }, [userData, relationMap]);
+  }, [appState]);
 
-  /** 将 UserData + RelationMap 转换为图数据 */
+  /** 将 AppState 转换为图数据 */
   const transformToGraphData = (
-    userData: UserData,
-    relationMap: RelationMap,
+    state: AppState,
   ): { nodes: GraphNode[]; links: GraphLink[] } => {
-    // 创建 uid → UserInfo 映射
-    const userInfoMap = new Map<number, UserInfo>();
-    userData.followings.forEach((user) => {
-      userInfoMap.set(user.uid, user);
-    });
+    const myData = state.users.get(state.myUid);
+    if (!myData) return { nodes: [], links: [] };
 
     // 我的关注对象的 ID 集合
-    const myFollowingIds = new Set(userData.followings.map((u) => u.uid));
+    const myFollowingIds = new Set(myData.following);
 
-    // 生成节点
-    const nodes: GraphNode[] = userData.followings.map((u) => ({
-      id: u.uid,
-      name: u.name,
-      face: u.face,
-    }));
+    // 生成节点：我的所有关注
+    const nodes: GraphNode[] = myData.following
+      .map((uid) => {
+        const user = state.users.get(uid);
+        if (!user) return null;
+        return {
+          id: user.uid,
+          name: user.uname,
+          face: user.face,
+        };
+      })
+      .filter((n): n is GraphNode => n !== null);
 
-    // 生成边：只保留 source 和 target 都在我的关注列表中的边
-    // 链接方向：target（共同关注的人）→ source（我的关注对象）
-    // 表示 "共同关注的人" 被 "我的关注对象" 关注
+    // 生成边：遍历每个关注的 following 字段
     const links: GraphLink[] = [];
     const linkSet = new Set<string>();
 
-    relationMap.forEach((targets, sourceId) => {
-      if (!myFollowingIds.has(sourceId)) return;
+    myData.following.forEach((uid) => {
+      const user = state.users.get(uid);
+      if (!user) return;
 
-      targets.forEach((targetId) => {
+      // user.following 是该用户关注的人中与我有共同关注的部分
+      user.following.forEach((targetId) => {
         if (myFollowingIds.has(targetId)) {
-          // 交换方向：targetId → sourceId（即 sourceId 关注了 targetId）
-          const linkKey = `${targetId}-${sourceId}`;
+          // 边方向：targetId → uid（即 uid 关注了 targetId）
+          const linkKey = `${targetId}-${uid}`;
           if (!linkSet.has(linkKey)) {
-            links.push({ source: targetId, target: sourceId });
+            links.push({ source: targetId, target: uid });
             linkSet.add(linkKey);
           }
         }
@@ -344,11 +390,14 @@ const DynamicFollowingsGraph: React.FC = () => {
         }
       }
 
+      // 初始化 users Map
+      const users = new Map<number, UserData>();
+
       // Step 2: 获取我的关注列表
       setLoadingState({ status: "loading_followings", current: 0, total: 0 });
       message.info("正在加载关注列表...");
 
-      const allFollowings: UserInfo[] = [];
+      const myFollowingUids: number[] = [];
       let page = 1;
       const pageSize = 50;
 
@@ -360,12 +409,17 @@ const DynamicFollowingsGraph: React.FC = () => {
       const total = firstResponse.data.total;
       const totalPages = Math.ceil(total / pageSize);
 
-      // 添加第一页
+      // 添加第一页的用户
       firstResponse.data.list.forEach((item) => {
-        allFollowings.push({
+        myFollowingUids.push(item.mid);
+        // 为每个关注创建初始 UserData
+        users.set(item.mid, {
           uid: item.mid,
-          name: item.uname,
+          uname: item.uname,
           face: item.face,
+          following: [],
+          deepFollowing: [],
+          deepFollower: [],
         });
       });
 
@@ -379,73 +433,99 @@ const DynamicFollowingsGraph: React.FC = () => {
           pn: page,
         });
         response.data.list.forEach((item) => {
-          allFollowings.push({
+          myFollowingUids.push(item.mid);
+          users.set(item.mid, {
             uid: item.mid,
-            name: item.uname,
+            uname: item.uname,
             face: item.face,
+            following: [],
+            deepFollowing: [],
+            deepFollower: [],
           });
         });
 
         setLoadingState({
           status: "loading_followings",
-          current: allFollowings.length,
+          current: myFollowingUids.length,
           total,
         });
 
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
-      // 保存用户数据
-      const newUserData: UserData = {
-        me: { uid: myMid, name: "我", face: "" },
-        followings: allFollowings,
-      };
-      setUserData(newUserData);
-      message.success(`成功加载 ${allFollowings.length} 个关注`);
+      // 创建「我」的 UserData
+      users.set(myMid, {
+        uid: myMid,
+        uname: "我",
+        face: "",
+        following: myFollowingUids,
+        deepFollowing: [], // 不需要获取，与 following 相同
+        deepFollower: [],
+      });
+
+      // 更新状态，让图形开始渲染
+      setAppState({ myUid: myMid, users: new Map(users) });
+      message.success(`成功加载 ${myFollowingUids.length} 个关注`);
 
       // Step 3: 获取每个关注对象的共同关注
       setLoadingState({
         status: "loading_relations",
         current: 0,
-        total: allFollowings.length,
+        total: myFollowingUids.length,
       });
       message.info("正在加载共同关注数据...");
 
-      const newRelationMap = new Map<number, number[]>();
-
-      for (let i = 0; i < allFollowings.length; i++) {
+      for (let i = 0; i < myFollowingUids.length; i++) {
         if (isPausedRef.current) await waitForResume();
 
-        const user = allFollowings[i];
+        const uid = myFollowingUids[i];
+        const user = users.get(uid);
+        if (!user) continue;
+
         setLoadingState({
           status: "loading_relations",
           current: i + 1,
-          total: allFollowings.length,
-          currentUser: user.name,
+          total: myFollowingUids.length,
+          currentUser: user.uname,
         });
 
         try {
-          const result = await getCommonFollowings(user.uid);
+          const result = await getCommonFollowings(uid);
           const commonMids = result.response.data.list.map((u) => u.mid);
-          newRelationMap.set(user.uid, commonMids);
 
-          // 实时更新 relationMap，让图形动态更新
-          setRelationMap(new Map(newRelationMap));
+          // 更新该用户的 following 字段
+          user.following = commonMids;
 
-          // 只有非缓存请求才需要延迟
+          // 同时将共同关注返回的用户信息存入 users（如果不存在）
+          result.response.data.list.forEach((u) => {
+            if (!users.has(u.mid)) {
+              users.set(u.mid, {
+                uid: u.mid,
+                uname: u.uname,
+                face: u.face,
+                following: [],
+                deepFollowing: [],
+                deepFollower: [],
+              });
+            }
+          });
+
+          // 实时更新状态，让图形动态更新
+          setAppState({ myUid: myMid, users: new Map(users) });
+
           if (!result.fromCache) {
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
         } catch (error) {
-          logger.error(`获取 ${user.name} 的共同关注失败:`, error);
-          newRelationMap.set(user.uid, []);
+          logger.error(`获取 ${user.uname} 的共同关注失败:`, error);
+          user.following = [];
         }
       }
 
       setLoadingState({
         status: "done",
-        current: allFollowings.length,
-        total: allFollowings.length,
+        current: myFollowingUids.length,
+        total: myFollowingUids.length,
       });
       message.success("数据加载完成！");
     } catch (error) {
@@ -467,16 +547,13 @@ const DynamicFollowingsGraph: React.FC = () => {
       loadingState.status === "done" ||
       loadingState.status === "error"
     ) {
-      // 开始加载
       setIsPaused(false);
       isPausedRef.current = false;
       loadAllData();
     } else if (isPaused) {
-      // 继续
       setIsPaused(false);
       isPausedRef.current = false;
     } else {
-      // 暂停
       setIsPaused(true);
       isPausedRef.current = true;
     }
@@ -497,10 +574,8 @@ const DynamicFollowingsGraph: React.FC = () => {
     const nodes = data.nodes as GraphNode[];
     const links = data.links as GraphLink[];
 
-    // 收集所有有连接的节点 ID
     const connectedNodeIds = new Set<number>();
     links.forEach((link: any) => {
-      // link.source 和 link.target 可能是对象或 ID
       const sourceId =
         typeof link.source === "object" ? link.source.id : link.source;
       const targetId =
@@ -509,7 +584,6 @@ const DynamicFollowingsGraph: React.FC = () => {
       connectedNodeIds.add(targetId);
     });
 
-    // 过滤出有连接的节点
     const filteredNodes = nodes.filter((node) => connectedNodeIds.has(node.id));
     const removedCount = nodes.length - filteredNodes.length;
 
