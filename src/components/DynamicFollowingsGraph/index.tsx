@@ -244,7 +244,7 @@ const DynamicFollowingsGraph: React.FC = () => {
 
     graphRef.current.d3Force("charge")?.strength(chargeStrength);
     graphRef.current.d3ReheatSimulation();
-  }, [dagOrientation]);
+  }, [dagOrientation, chargeStrength]);
 
   // 更新节点颜色
   useEffect(() => {
@@ -577,9 +577,10 @@ const DynamicFollowingsGraph: React.FC = () => {
             addLinksToGraph(newLinks);
           }
 
-          if (!result.fromCache) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
-          }
+          // 延迟：API 请求 300ms，缓存命中 10ms（让 UI 有机会更新）
+          await new Promise((resolve) =>
+            setTimeout(resolve, result.fromCache ? 10 : 300),
+          );
         } catch (error) {
           logger.error(`获取 ${user.uname} 的共同关注失败:`, error);
           user.following = [];
