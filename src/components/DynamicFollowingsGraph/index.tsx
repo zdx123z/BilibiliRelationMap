@@ -7,7 +7,6 @@ import {
   Row,
   Col,
   Progress,
-  Select,
   Slider,
   ColorPicker,
   Input,
@@ -20,6 +19,7 @@ import {
   ReloadOutlined,
   DisconnectOutlined,
   SearchOutlined,
+  NodeExpandOutlined,
 } from "@ant-design/icons";
 import ForceGraph from "force-graph";
 import { useAppContext } from "../../contexts/AppContext";
@@ -28,6 +28,7 @@ import {
   getCurrentUserMidFromAPI,
   getFollowingsList,
   getCommonFollowings,
+  getFansList,
 } from "../../services/biliApi";
 import logger from "../../utils/logger";
 
@@ -74,10 +75,14 @@ interface GraphNode {
   y?: number;
 }
 
+/** 连线类型 */
+type LinkType = "common" | "deep_following" | "deep_follower";
+
 /** 图边 */
 interface GraphLink {
   source: number | GraphNode;
   target: number | GraphNode;
+  linkType: LinkType;
 }
 
 /** 加载状态 */
@@ -93,15 +98,6 @@ interface LoadingState {
   currentUser?: string;
   error?: string;
 }
-
-type DagOrientation =
-  | "td"
-  | "bu"
-  | "lr"
-  | "rl"
-  | "radialout"
-  | "radialin"
-  | null;
 
 // ================== 组件 ==================
 
@@ -126,7 +122,6 @@ const DynamicFollowingsGraph: React.FC = () => {
   const isPausedRef = useRef(false);
   // 修复: 添加组件挂载状态追踪
   const isMountedRef = useRef(true);
-  const [dagOrientation, setDagOrientation] = useState<DagOrientation>(null);
 
   // 力引擎参数
   const [alphaDecay, setAlphaDecay] = useState(0.05);
@@ -146,6 +141,17 @@ const DynamicFollowingsGraph: React.FC = () => {
   // 搜索状态
   const [searchValue, setSearchValue] = useState("");
   const searchedNodesRef = useRef<Set<GraphNode>>(new Set());
+
+  // 深度模式状态
+  const [deepMode, setDeepMode] = useState(false);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const exploredNodesRef = useRef<Set<number>>(new Set());
+  const deepModeRef = useRef(false);
+
+  // 同步深度模式到 ref
+  useEffect(() => {
+    deepModeRef.current = deepMode;
+  }, [deepMode]);
 
   // 高亮状态（使用 ref 避免重新渲染）
   const highlightNodesRef = useRef<Set<GraphNode>>(new Set());
@@ -209,7 +215,12 @@ const DynamicFollowingsGraph: React.FC = () => {
         }
       })
       .onNodeClick((node: any) => {
-        window.open(`https://space.bilibili.com/${node.id}`, "_blank");
+        // 深度模式下触发深度探索，否则打开用户主页
+        if (deepModeRef.current) {
+          handleDeepExplore(node.id);
+        } else {
+          window.open(`https://space.bilibili.com/${node.id}`, "_blank");
+        }
       })
       .autoPauseRedraw(false)
       .linkWidth((link: any) => (highlightLinksRef.current.has(link) ? 3 : 1))
@@ -261,20 +272,6 @@ const DynamicFollowingsGraph: React.FC = () => {
     };
   }, []);
 
-  // 更新 DAG 方向
-  // 修复: 移除 chargeStrength 依赖，由单独的 useEffect 处理
-  useEffect(() => {
-    if (!graphRef.current) return;
-
-    graphRef.current.dagMode(dagOrientation);
-
-    if (dagOrientation) {
-      graphRef.current.dagLevelDistance(200);
-    }
-
-    graphRef.current.d3ReheatSimulation();
-  }, [dagOrientation]);
-
   // 更新节点颜色
   useEffect(() => {
     if (!graphRef.current) return;
@@ -287,10 +284,20 @@ const DynamicFollowingsGraph: React.FC = () => {
     graphRef.current.nodeRelSize(nodeRelSize);
   }, [nodeRelSize]);
 
-  // 更新连线颜色
+  // 更新连线颜色（根据类型区分）
   useEffect(() => {
     if (!graphRef.current) return;
-    graphRef.current.linkColor(() => linkColor);
+    graphRef.current.linkColor((link: any) => {
+      switch (link.linkType) {
+        case "deep_following":
+          return "#ff6b6b"; // 红色: 深度关注
+        case "deep_follower":
+          return "#4dabf7"; // 蓝色: 深度粉丝
+        case "common":
+        default:
+          return linkColor; // 默认颜色: 共同关注
+      }
+    });
   }, [linkColor]);
 
   // 更新连线曲率
@@ -401,6 +408,165 @@ const DynamicFollowingsGraph: React.FC = () => {
       linkCount: links.length + uniqueNewLinks.length,
     });
   }, []);
+
+  /** 深度探索：获取指定用户的关注和粉丝 */
+  const handleDeepExplore = useCallback(
+    async (uid: number) => {
+      // 检查是否已探索过
+      if (exploredNodesRef.current.has(uid)) {
+        message.info("该节点已探索过");
+        return;
+      }
+
+      if (deepLoading) {
+        message.warning("正在加载中，请稍候");
+        return;
+      }
+
+      setDeepLoading(true);
+      exploredNodesRef.current.add(uid);
+
+      const users = appStateRef.current.users;
+      const user = users.get(uid);
+      const userName = user?.uname || `UID:${uid}`;
+
+      try {
+        message.info(`正在探索 ${userName} 的关系...`);
+
+        // 获取当前图中已有的节点ID
+        const { nodes: currentNodes } = graphRef.current?.graphData() || {
+          nodes: [],
+        };
+        const existingNodeIds = new Set(
+          (currentNodes as GraphNode[]).map((n) => n.id),
+        );
+
+        const newNodes: GraphNode[] = [];
+        const newLinks: GraphLink[] = [];
+
+        // 1. 获取该用户的关注列表 (deepFollowing)
+        try {
+          const followingsResponse = await getFollowingsList({
+            vmid: uid,
+            ps: 50,
+            pn: 1,
+          });
+
+          const followingList = followingsResponse.data.list || [];
+
+          for (const item of followingList) {
+            // 如果节点不存在，添加新节点
+            if (!existingNodeIds.has(item.mid)) {
+              newNodes.push({
+                id: item.mid,
+                name: item.uname,
+                face: item.face,
+              });
+              existingNodeIds.add(item.mid);
+
+              // 存入 users
+              if (!users.has(item.mid)) {
+                users.set(item.mid, {
+                  uid: item.mid,
+                  uname: item.uname,
+                  face: item.face,
+                  following: [],
+                  deepFollowing: [],
+                  deepFollower: [],
+                });
+              }
+            }
+
+            // 添加连线: uid -> item.mid (uid 关注了 item.mid)
+            newLinks.push({
+              source: uid,
+              target: item.mid,
+              linkType: "deep_following",
+            });
+          }
+
+          // 更新用户的 deepFollowing
+          if (user) {
+            user.deepFollowing = followingList.map((item) => item.mid);
+          }
+        } catch (error) {
+          logger.error(`获取 ${userName} 的关注列表失败:`, error);
+        }
+
+        // 等待一下避免请求过快
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        // 2. 获取该用户的粉丝列表 (deepFollower)
+        try {
+          const fansResponse = await getFansList({
+            vmid: uid,
+            ps: 50,
+            pn: 1,
+          });
+
+          const fansList = fansResponse.data.list || [];
+
+          for (const item of fansList) {
+            // 如果节点不存在，添加新节点
+            if (!existingNodeIds.has(item.mid)) {
+              newNodes.push({
+                id: item.mid,
+                name: item.uname,
+                face: item.face,
+              });
+              existingNodeIds.add(item.mid);
+
+              // 存入 users
+              if (!users.has(item.mid)) {
+                users.set(item.mid, {
+                  uid: item.mid,
+                  uname: item.uname,
+                  face: item.face,
+                  following: [],
+                  deepFollowing: [],
+                  deepFollower: [],
+                });
+              }
+            }
+
+            // 添加连线: item.mid -> uid (item.mid 关注了 uid)
+            newLinks.push({
+              source: item.mid,
+              target: uid,
+              linkType: "deep_follower",
+            });
+          }
+
+          // 更新用户的 deepFollower
+          if (user) {
+            user.deepFollower = fansList.map((item) => item.mid);
+          }
+        } catch (error) {
+          logger.error(`获取 ${userName} 的粉丝列表失败:`, error);
+        }
+
+        // 添加新节点和连线到图形
+        if (newNodes.length > 0) {
+          addNodesToGraph(newNodes);
+        }
+        if (newLinks.length > 0) {
+          addLinksToGraph(newLinks);
+        }
+
+        message.success(
+          `探索完成: 新增 ${newNodes.length} 个节点, ${newLinks.length} 条连线`,
+        );
+      } catch (error) {
+        logger.error("深度探索失败:", error);
+        message.error("深度探索失败");
+        // 移除已探索标记，允许重试
+        exploredNodesRef.current.delete(uid);
+      } finally {
+        setDeepLoading(false);
+      }
+    },
+    [message, addNodesToGraph, addLinksToGraph, deepLoading],
+  );
 
   /** 等待恢复（暂停时使用）
    * 修复: 添加组件卸载检查，避免内存泄漏
@@ -628,7 +794,11 @@ const DynamicFollowingsGraph: React.FC = () => {
           commonMids.forEach((targetId) => {
             if (myFollowingSet.has(targetId)) {
               // 边方向：targetId → uid（即 uid 关注了 targetId）
-              newLinks.push({ source: targetId, target: uid });
+              newLinks.push({
+                source: targetId,
+                target: uid,
+                linkType: "common",
+              });
             }
           });
 
@@ -858,22 +1028,6 @@ const DynamicFollowingsGraph: React.FC = () => {
           >
             {getButtonText()}
           </Button>
-          <Select
-            value={dagOrientation}
-            onChange={setDagOrientation}
-            onClick={(e) => e.stopPropagation()}
-            size="small"
-            style={{ width: 100 }}
-            options={[
-              { label: "自由布局", value: null },
-              { label: "上下 (TD)", value: "td" },
-              { label: "下上 (BU)", value: "bu" },
-              { label: "左右 (LR)", value: "lr" },
-              { label: "右左 (RL)", value: "rl" },
-              { label: "径向向外", value: "radialout" },
-              { label: "径向向内", value: "radialin" },
-            ]}
-          />
           <Button
             size="small"
             icon={<ReloadOutlined />}
@@ -894,6 +1048,25 @@ const DynamicFollowingsGraph: React.FC = () => {
             disabled={isLoading || stats.nodeCount === 0}
           >
             移除孤立节点
+          </Button>
+          <Button
+            size="small"
+            type={deepMode ? "primary" : "default"}
+            danger={deepMode}
+            icon={<NodeExpandOutlined />}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeepMode(!deepMode);
+              if (!deepMode) {
+                message.info("深度模式已开启，点击节点可探索其关注和粉丝");
+              } else {
+                message.info("深度模式已关闭");
+              }
+            }}
+            loading={deepLoading}
+            disabled={stats.nodeCount === 0}
+          >
+            {deepMode ? "退出深度模式" : "深度模式"}
           </Button>
         </Space>
       ),
