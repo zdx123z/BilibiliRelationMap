@@ -111,13 +111,26 @@ class CacheManager {
 
   /**
    * 内部同步获取方法
+   * 修复: 添加数据结构验证
    */
   private getSync<T>(key: string): T | null {
     try {
       const item = localStorage.getItem(this.prefix + key);
       if (!item) return null;
 
-      const cacheItem: CacheItem<T> = JSON.parse(item);
+      const cacheItem = JSON.parse(item);
+
+      // 验证数据结构完整性
+      if (
+        !cacheItem ||
+        typeof cacheItem !== "object" ||
+        typeof cacheItem.expiry !== "number" ||
+        !("data" in cacheItem)
+      ) {
+        logger.warn(`缓存数据格式无效，已删除: ${key}`);
+        this.remove(key);
+        return null;
+      }
 
       // 检查是否过期
       if (Date.now() > cacheItem.expiry) {
@@ -125,9 +138,11 @@ class CacheManager {
         return null;
       }
 
-      return cacheItem.data;
+      return cacheItem.data as T;
     } catch (error) {
       logger.error("localStorage 读取失败:", error);
+      // 解析失败时删除损坏的数据
+      this.remove(key);
       return null;
     }
   }

@@ -124,6 +124,8 @@ const DynamicFollowingsGraph: React.FC = () => {
   });
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
+  // 修复: 添加组件挂载状态追踪
+  const isMountedRef = useRef(true);
   const [dagOrientation, setDagOrientation] = useState<DagOrientation>(null);
 
   // 力引擎参数
@@ -154,6 +156,14 @@ const DynamicFollowingsGraph: React.FC = () => {
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
+
+  // 修复: 组件卸载时设置 isMountedRef 为 false
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // 初始化图形
   useEffect(() => {
@@ -215,7 +225,8 @@ const DynamicFollowingsGraph: React.FC = () => {
           : undefined,
       )
       .nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D) => {
-        if (!node.x || !node.y) return;
+        // 修复: 使用 typeof 检查，避免将坐标 0 误判为无效
+        if (typeof node.x !== "number" || typeof node.y !== "number") return;
         ctx.beginPath();
         ctx.arc(node.x, node.y, NODE_R * 0.56, 0, 2 * Math.PI, false);
         // 搜索高亮使用绿色，hover 高亮使用紫色，普通高亮使用黄色
@@ -251,6 +262,7 @@ const DynamicFollowingsGraph: React.FC = () => {
   }, []);
 
   // 更新 DAG 方向
+  // 修复: 移除 chargeStrength 依赖，由单独的 useEffect 处理
   useEffect(() => {
     if (!graphRef.current) return;
 
@@ -260,9 +272,8 @@ const DynamicFollowingsGraph: React.FC = () => {
       graphRef.current.dagLevelDistance(200);
     }
 
-    graphRef.current.d3Force("charge")?.strength(chargeStrength);
     graphRef.current.d3ReheatSimulation();
-  }, [dagOrientation, chargeStrength]);
+  }, [dagOrientation]);
 
   // 更新节点颜色
   useEffect(() => {
@@ -391,10 +402,17 @@ const DynamicFollowingsGraph: React.FC = () => {
     });
   }, []);
 
-  /** 等待恢复（暂停时使用） */
+  /** 等待恢复（暂停时使用）
+   * 修复: 添加组件卸载检查，避免内存泄漏
+   */
   const waitForResume = (): Promise<void> => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const check = () => {
+        // 组件已卸载，直接 reject
+        if (!isMountedRef.current) {
+          reject(new Error("组件已卸载"));
+          return;
+        }
         if (!isPausedRef.current) {
           resolve();
         } else {
@@ -405,7 +423,9 @@ const DynamicFollowingsGraph: React.FC = () => {
     });
   };
 
-  /** 加载所有数据 */
+  /** 加载所有数据
+   * 修复: 在异步操作中检查组件是否已卸载
+   */
   const loadAllData = useCallback(async () => {
     try {
       // Step 1: 获取我的 ID
@@ -424,6 +444,9 @@ const DynamicFollowingsGraph: React.FC = () => {
           return;
         }
       }
+
+      // 检查组件是否已卸载
+      if (!isMountedRef.current) return;
 
       // 重置图形数据
       if (graphRef.current) {
@@ -494,7 +517,16 @@ const DynamicFollowingsGraph: React.FC = () => {
 
       // 加载剩余页面
       for (page = 2; page <= totalPages; page++) {
-        if (isPausedRef.current) await waitForResume();
+        // 检查组件是否已卸载
+        if (!isMountedRef.current) return;
+
+        if (isPausedRef.current) {
+          try {
+            await waitForResume();
+          } catch {
+            return; // 组件已卸载
+          }
+        }
 
         const response = await getFollowingsList({
           vmid: myMid,
@@ -548,7 +580,16 @@ const DynamicFollowingsGraph: React.FC = () => {
       const myFollowingSet = new Set(myFollowingUids);
 
       for (let i = 0; i < myFollowingUids.length; i++) {
-        if (isPausedRef.current) await waitForResume();
+        // 检查组件是否已卸载
+        if (!isMountedRef.current) return;
+
+        if (isPausedRef.current) {
+          try {
+            await waitForResume();
+          } catch {
+            return; // 组件已卸载
+          }
+        }
 
         const uid = myFollowingUids[i];
         const user = users.get(uid);

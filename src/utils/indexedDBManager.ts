@@ -39,6 +39,7 @@ class IndexedDBManager {
 
   /**
    * 初始化数据库连接
+   * 修复: 连接失败时重置 dbPromise，允许重试
    */
   private async getDB(): Promise<IDBPDatabase<BilibiliDB>> {
     if (!this.dbPromise) {
@@ -49,6 +50,10 @@ class IndexedDBManager {
             db.createObjectStore("cache");
           }
         },
+      }).catch((error) => {
+        // 连接失败时重置 dbPromise，允许下次重试
+        this.dbPromise = null;
+        throw error;
       });
     }
     return this.dbPromise;
